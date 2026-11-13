@@ -158,7 +158,7 @@ func createClients(cfg Config) (*driverClients, error) {
 	if cfg.NfsVhostSocket != "" || cfg.NfsVhostPort != 0 {
 		for i := 0; i < int(cfg.NfsVhostReplicaCountTotal); i++ {
 			nfsVhostSocket := getSocketName(cfg.NfsVhostSocket, uint(i))
-			nfsVhostPort := getPort(cfg.NbsPort, uint(i))
+			nfsVhostPort := getPort(cfg.NfsVhostPort, uint(i))
 			nfsEndpointClient, err := nfsclient.NewGrpcEndpointClient(
 				&nfsclient.GrpcClientOpts{
 					Endpoint: getEndpoint(nfsVhostSocket, cfg.NfsVhostHost, nfsVhostPort),

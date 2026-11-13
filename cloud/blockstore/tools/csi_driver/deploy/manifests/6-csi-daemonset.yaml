@@ -79,6 +79,12 @@ spec:
               mountPath: /csi
             - name: sockets-dir
               mountPath: /run/nbsd/sockets
+            # Match compute-node's staging_root and publication_root settings.
+            - name: compute-storage-staging
+              mountPath: /var/lib/computenode/storage/staging
+            - name: compute-storage-published
+              mountPath: /var/lib/computenode/storage/published
+              mountPropagation: "Bidirectional"
             - name: dev
               mountPath: /mnt/dev
           ports:
@@ -100,6 +106,15 @@ spec:
         - name: sockets-dir
           hostPath:
             path: /run/nbsd/sockets
+            type: DirectoryOrCreate
+        # Keep stage records on persistent host storage, outside socket tmpfs.
+        - name: compute-storage-staging
+          hostPath:
+            path: /var/lib/computenode/storage/staging
+            type: DirectoryOrCreate
+        - name: compute-storage-published
+          hostPath:
+            path: /var/lib/computenode/storage/published
             type: DirectoryOrCreate
         - name: dev
           hostPath:

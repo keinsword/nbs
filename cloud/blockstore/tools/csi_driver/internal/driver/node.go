@@ -51,6 +51,7 @@ const backendVolumeContextKey = "backend"
 const deviceNameVolumeContextKey = "deviceName"
 const requestQueuesCountVolumeContextKey = "requestQueuesCount"
 const instanceIdKey = "instanceId"
+const podUidKey = "csi.storage.k8s.io/pod.uid"
 
 const defaultVhostQueuesCount = uint32(8)
 const maxQueuesCount = 65536
@@ -509,9 +510,17 @@ func (s *nodeService) NodePublishVolume(
 			"VolumeContext is missing in NodePublishVolumeRequest")
 	}
 
+	if s.vmMode && req.VolumeCapability.GetMount() != nil {
+		_, instanceId := parseVolumeId(req.VolumeId)
+		if instanceId != "" && req.VolumeContext[instanceIdKey] != instanceId {
+			return nil, s.statusError(codes.InvalidArgument,
+				"VolumeContext.instanceId must match the instance in VolumeId")
+		}
+	}
+
 	if s.getPodId(req) == "" {
-		return nil, s.statusError(codes.Internal,
-			"podUID is missing in NodePublishVolumeRequest.VolumeContext")
+		return nil, s.statusError(codes.InvalidArgument,
+			"Pod UID is missing: provide csi.storage.k8s.io/pod.uid for an instance-qualified staged VM volume or use a kubelet TargetPath")
 	}
 
 	nfsBackend := (req.VolumeContext[backendVolumeContextKey] == "nfs")
@@ -1763,7 +1772,16 @@ func (s *nodeService) formatAndMount(
 }
 
 func (s *nodeService) getPodId(req *csi.NodePublishVolumeRequest) string {
-	// another way to get podId is: return req.VolumeContext["csi.storage.k8s.io/pod.uid"]
+	// Instance-qualified staged VM volumes unpublish without parsing TargetPath.
+	// Other volumes still need kubelet paths so legacy cleanup can find the pod.
+	if s.vmMode && req.VolumeCapability.GetMount() != nil {
+		_, instanceId := parseVolumeId(req.VolumeId)
+		if instanceId != "" && instanceId == req.VolumeContext[instanceIdKey] {
+			if podId := req.VolumeContext[podUidKey]; podId != "" {
+				return podId
+			}
+		}
+	}
 
 	switch req.VolumeCapability.GetAccessType().(type) {
 	case *csi.VolumeCapability_Mount:

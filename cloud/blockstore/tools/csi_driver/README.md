@@ -1,3 +1,47 @@
+# Compute-node storage publications
+
+In VM mode, compute-node can call the CSI Node service directly. Kubelet still
+sets up the launcher's ordinary hostPath mount, but does not issue CSI calls for
+these attachments.
+
+For a compute-node publication, use a volume ID of `<resourceID>#<instanceID>`
+and set `VolumeContext.instanceId` to the same instance ID. Publish must supply
+the launcher Pod UID in `VolumeContext["csi.storage.k8s.io/pod.uid"]`. The driver
+uses that field for instance-qualified staged VM volumes. If it is absent, the
+driver falls back to parsing the kubelet target path. Other volume flows retain
+path-based Pod identification because their cleanup depends on that path.
+A mismatched instance ID or a missing Pod UID that cannot be obtained from the
+path returns `InvalidArgument`.
+
+The node DaemonSet manifest exposes these compute-node defaults:
+
+| Purpose | Host path and CSI container path |
+|---|---|
+| Persistent stage records | `/var/lib/computenode/storage/staging` |
+| Publication bind mounts | `/var/lib/computenode/storage/published` |
+
+Both mounts must use the same absolute host and container paths. If compute-node
+uses different `staging_root` or `publication_root` values, change the matching
+`hostPath.path` and `volumeMounts.mountPath` values in the DaemonSet. The publication
+mount uses `Bidirectional` propagation so CSI bind mounts reach the host. The
+host mount hierarchy must support propagation. Keep staging on persistent host
+storage rather than the endpoint socket tmpfs.
+
+Compute-node stages under `<staging_root>/<instanceID>/<resourceID>` and publishes
+under `<publication_root>/<VMIUID>/<resourceID>`. Launcher admission must mount
+`<publication_root>/<VMIUID>` at `/var/run/compute-storage` with `HostToContainer`
+propagation. These attachments must not also be declared as Pod PVC/CSI volumes.
+
+Stage starts the backend endpoint and saves its cleanup record. Publish binds the
+endpoint directory to the requested target. For instance-qualified VM volumes,
+Unpublish removes only the publication; Unstage stops the endpoint. Compute-node
+must remove all local publications before it calls Unstage. This applies to NBS
+disks and YDB FileStore filesystems exposed through virtio-fs, not the NFS protocol.
+Backend socket permissions must allow the launcher's QEMU process to connect.
+
+This repository contains a static node DaemonSet manifest. The production CSI
+Helm templates and values are maintained in Nebo and need the same mounts.
+
 # Volume expansion
 
 In pod mode, online expansion is enabled by default. The driver advertises
